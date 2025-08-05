@@ -24,14 +24,215 @@
                     <i class="fas fa-box"></i>
                     PackageTracker Pro
                 </h1>
-                <button class="profile-btn" id="profileBtn">
-                    <i class="fas fa-user-circle"></i>
-                </button>
+                <div class="header-actions">
+                    <button class="portal-btn" id="portalBtn" title="Portal Management">
+                        <i class="fas fa-shield-alt"></i>
+                    </button>
+                    <button class="profile-btn" id="profileBtn">
+                        <i class="fas fa-user-circle"></i>
+                    </button>
+                </div>
             </div>
         </header>
 
         <!-- Main Content -->
         <main class="main-content">
+            <!-- Portal Login View -->
+            <div class="view" id="portalLoginView" style="display: none;">
+                <div class="login-container">
+                    <div class="login-card">
+                        <div class="login-header">
+                            <button class="back-btn" id="backFromPortalLogin">
+                                <i class="fas fa-arrow-left"></i>
+                            </button>
+                            <h2><i class="fas fa-shield-alt"></i> Portal Management</h2>
+                        </div>
+                        
+                        <form class="login-form" id="portalLoginForm">
+                            <div class="form-group">
+                                <label for="portalUsername">Username</label>
+                                <input type="text" id="portalUsername" placeholder="Enter username" required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="portalPassword">Password</label>
+                                <input type="password" id="portalPassword" placeholder="Enter password" required>
+                                <button type="button" class="password-toggle" id="togglePassword">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            </div>
+                            
+                            <button type="submit" class="primary-btn login-btn">
+                                <i class="fas fa-sign-in-alt"></i>
+                                Login to Portal
+                            </button>
+                        </form>
+                        
+                        <div class="login-info">
+                            <p><i class="fas fa-info-circle"></i> Authorized personnel only</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Portal Management Dashboard -->
+            <div class="view" id="portalDashboardView" style="display: none;">
+                <div class="portal-container">
+                    <div class="portal-header">
+                        <div class="portal-title">
+                            <h2><i class="fas fa-tachometer-alt"></i> Portal Management</h2>
+                            <span class="portal-user">Welcome, <span id="portalUserName">Admin</span></span>
+                        </div>
+                        <button class="logout-btn" id="portalLogoutBtn">
+                            <i class="fas fa-sign-out-alt"></i>
+                            Logout
+                        </button>
+                    </div>
+                    
+                    <div class="portal-tabs">
+                        <button class="portal-tab active" data-tab="overview">
+                            <i class="fas fa-chart-line"></i> Overview
+                        </button>
+                        <button class="portal-tab" data-tab="users">
+                            <i class="fas fa-users"></i> Users
+                        </button>
+                        <button class="portal-tab" data-tab="data">
+                            <i class="fas fa-database"></i> Data
+                        </button>
+                        <button class="portal-tab" data-tab="logs">
+                            <i class="fas fa-list-alt"></i> Logs
+                        </button>
+                        <button class="portal-tab" data-tab="settings">
+                            <i class="fas fa-cog"></i> Settings
+                        </button>
+                    </div>
+                    
+                    <!-- Overview Tab -->
+                    <div class="portal-tab-content active" id="overview-tab">
+                        <div class="portal-stats-grid">
+                            <div class="portal-stat-card">
+                                <div class="stat-icon">
+                                    <i class="fas fa-box"></i>
+                                </div>
+                                <div class="stat-info">
+                                    <span class="stat-number" id="portalTotalPackages">0</span>
+                                    <span class="stat-label">Total Packages</span>
+                                </div>
+                            </div>
+                            <div class="portal-stat-card">
+                                <div class="stat-icon">
+                                    <i class="fas fa-users"></i>
+                                </div>
+                                <div class="stat-info">
+                                    <span class="stat-number" id="portalTotalUsers">1</span>
+                                    <span class="stat-label">Active Users</span>
+                                </div>
+                            </div>
+                            <div class="portal-stat-card">
+                                <div class="stat-icon">
+                                    <i class="fas fa-calendar-day"></i>
+                                </div>
+                                <div class="stat-info">
+                                    <span class="stat-number" id="portalTodayActivity">0</span>
+                                    <span class="stat-label">Today's Activity</span>
+                                </div>
+                            </div>
+                            <div class="portal-stat-card">
+                                <div class="stat-icon">
+                                    <i class="fas fa-hdd"></i>
+                                </div>
+                                <div class="stat-info">
+                                    <span class="stat-number" id="portalStorageUsed">0</span>
+                                    <span class="stat-label">Storage Used (KB)</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="portal-charts">
+                            <div class="chart-card">
+                                <h3>Package Activity (Last 7 Days)</h3>
+                                <div class="activity-chart" id="activityChart">
+                                    <!-- Chart will be generated here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Users Tab -->
+                    <div class="portal-tab-content" id="users-tab">
+                        <div class="tab-header">
+                            <h3>User Management</h3>
+                            <button class="primary-btn" id="addUserBtn">
+                                <i class="fas fa-plus"></i> Add User
+                            </button>
+                        </div>
+                        <div class="users-list" id="usersList">
+                            <!-- Users will be listed here -->
+                        </div>
+                    </div>
+                    
+                    <!-- Data Tab -->
+                    <div class="portal-tab-content" id="data-tab">
+                        <div class="tab-header">
+                            <h3>Data Management</h3>
+                        </div>
+                        <div class="data-actions">
+                            <button class="primary-btn" id="exportDataBtn">
+                                <i class="fas fa-download"></i> Export All Data
+                            </button>
+                            <button class="secondary-btn" id="importDataBtn">
+                                <i class="fas fa-upload"></i> Import Data
+                            </button>
+                            <button class="danger-btn" id="clearDataBtn">
+                                <i class="fas fa-trash"></i> Clear All Data
+                            </button>
+                        </div>
+                        <input type="file" id="importFileInput" accept=".json" style="display: none;">
+                    </div>
+                    
+                    <!-- Logs Tab -->
+                    <div class="portal-tab-content" id="logs-tab">
+                        <div class="tab-header">
+                            <h3>System Logs</h3>
+                            <button class="secondary-btn" id="clearLogsBtn">
+                                <i class="fas fa-broom"></i> Clear Logs
+                            </button>
+                        </div>
+                        <div class="logs-container" id="logsContainer">
+                            <!-- Logs will be displayed here -->
+                        </div>
+                    </div>
+                    
+                    <!-- Settings Tab -->
+                    <div class="portal-tab-content" id="settings-tab">
+                        <div class="tab-header">
+                            <h3>System Settings</h3>
+                        </div>
+                        <div class="settings-form">
+                            <div class="form-group">
+                                <label for="autoBackup">Auto Backup</label>
+                                <input type="checkbox" id="autoBackup" class="toggle-switch">
+                            </div>
+                            <div class="form-group">
+                                <label for="retentionDays">Data Retention (Days)</label>
+                                <input type="number" id="retentionDays" value="365" min="1" max="9999">
+                            </div>
+                            <div class="form-group">
+                                <label for="themeMode">Theme Mode</label>
+                                <select id="themeMode">
+                                    <option value="light">Light</option>
+                                    <option value="dark">Dark</option>
+                                    <option value="auto">Auto</option>
+                                </select>
+                            </div>
+                            <button class="primary-btn" id="saveSettingsBtn">
+                                <i class="fas fa-save"></i> Save Settings
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Dashboard View -->
             <div class="view" id="dashboardView">
                 <div class="stats-grid">
