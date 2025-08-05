@@ -5,6 +5,17 @@ class PackageTracker {
         this.packages = JSON.parse(localStorage.getItem('packages')) || [];
         this.currentView = 'dashboard';
         this.cameraStream = null;
+        this.isLoggedInToPortal = JSON.parse(localStorage.getItem('portalSession')) || false;
+        this.portalUsers = JSON.parse(localStorage.getItem('portalUsers')) || [
+            { id: 1, username: 'hilton', role: 'admin', created: new Date().toISOString(), lastLogin: null }
+        ];
+        this.systemLogs = JSON.parse(localStorage.getItem('systemLogs')) || [];
+        this.systemSettings = JSON.parse(localStorage.getItem('systemSettings')) || {
+            autoBackup: false,
+            retentionDays: 365,
+            themeMode: 'light'
+        };
+        this.portalCredentials = { username: 'hilton', password: 'hilton2025!' };
         this.init();
     }
 
@@ -13,6 +24,7 @@ class PackageTracker {
         this.updateStats();
         this.renderPackageList();
         this.checkCameraSupport();
+        this.logActivity('System', 'Application started');
     }
 
     setupEventListeners() {
@@ -21,6 +33,27 @@ class PackageTracker {
         document.getElementById('manualBtn').addEventListener('click', () => this.showFormView());
         document.getElementById('backToMain').addEventListener('click', () => this.showDashboard());
         document.getElementById('backFromForm').addEventListener('click', () => this.showDashboard());
+        
+        // Portal Management
+        document.getElementById('portalBtn').addEventListener('click', () => this.showPortalLogin());
+        document.getElementById('backFromPortalLogin').addEventListener('click', () => this.showDashboard());
+        document.getElementById('portalLoginForm').addEventListener('submit', (e) => this.handlePortalLogin(e));
+        document.getElementById('togglePassword').addEventListener('click', () => this.togglePasswordVisibility());
+        document.getElementById('portalLogoutBtn').addEventListener('click', () => this.handlePortalLogout());
+        
+        // Portal Tabs
+        document.querySelectorAll('.portal-tab').forEach(tab => {
+            tab.addEventListener('click', () => this.switchPortalTab(tab.dataset.tab));
+        });
+        
+        // Portal Actions
+        document.getElementById('addUserBtn').addEventListener('click', () => this.showAddUserForm());
+        document.getElementById('exportDataBtn').addEventListener('click', () => this.exportAllData());
+        document.getElementById('importDataBtn').addEventListener('click', () => this.importData());
+        document.getElementById('clearDataBtn').addEventListener('click', () => this.clearAllData());
+        document.getElementById('clearLogsBtn').addEventListener('click', () => this.clearSystemLogs());
+        document.getElementById('saveSettingsBtn').addEventListener('click', () => this.saveSettings());
+        document.getElementById('importFileInput').addEventListener('change', (e) => this.handleFileImport(e));
         
         // Scan actions
         document.getElementById('captureBtn').addEventListener('click', () => this.captureImage());
@@ -65,6 +98,229 @@ class PackageTracker {
             document.getElementById('trackingNumber').value = trackingNumber;
         }
         this.resetForm();
+    }
+
+    // Portal Authentication
+    showPortalLogin() {
+        if (this.isLoggedInToPortal) {
+            this.showPortalDashboard();
+        } else {
+            this.showView('portalLoginView');
+        }
+    }
+
+    handlePortalLogin(e) {
+        e.preventDefault();
+        const username = document.getElementById('portalUsername').value;
+        const password = document.getElementById('portalPassword').value;
+        
+        if (username === this.portalCredentials.username && password === this.portalCredentials.password) {
+            this.isLoggedInToPortal = true;
+            localStorage.setItem('portalSession', JSON.stringify(true));
+            
+            // Update last login for user
+            const user = this.portalUsers.find(u => u.username === username);
+            if (user) {
+                user.lastLogin = new Date().toISOString();
+                this.savePortalUsers();
+            }
+            
+            this.logActivity('Portal', `User ${username} logged in`);
+            this.showToast('Portal login successful!', 'success');
+            this.showPortalDashboard();
+        } else {
+            this.logActivity('Portal', `Failed login attempt for user ${username}`);
+            this.showToast('Invalid username or password', 'error');
+        }
+    }
+
+    handlePortalLogout() {
+        this.isLoggedInToPortal = false;
+        localStorage.removeItem('portalSession');
+        this.logActivity('Portal', 'User logged out');
+        this.showToast('Logged out successfully', 'info');
+        this.showDashboard();
+    }
+
+    togglePasswordVisibility() {
+        const passwordInput = document.getElementById('portalPassword');
+        const toggleIcon = document.getElementById('togglePassword').querySelector('i');
+        
+        if (passwordInput.type === 'password') {
+            passwordInput.type = 'text';
+            toggleIcon.className = 'fas fa-eye-slash';
+        } else {
+            passwordInput.type = 'password';
+            toggleIcon.className = 'fas fa-eye';
+        }
+    }
+
+    // Portal Dashboard
+    showPortalDashboard() {
+        this.showView('portalDashboardView');
+        this.updatePortalStats();
+        this.renderPortalUsers();
+        this.renderSystemLogs();
+        this.loadSettings();
+        this.generateActivityChart();
+        document.getElementById('portalUserName').textContent = this.portalCredentials.username;
+    }
+
+    switchPortalTab(tabName) {
+        // Update tab buttons
+        document.querySelectorAll('.portal-tab').forEach(tab => {
+            tab.classList.remove('active');
+        });
+        document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+        
+        // Update tab content
+        document.querySelectorAll('.portal-tab-content').forEach(content => {
+            content.classList.remove('active');
+        });
+        document.getElementById(`${tabName}-tab`).classList.add('active');
+        
+        // Load tab-specific data
+        if (tabName === 'users') {
+            this.renderPortalUsers();
+        } else if (tabName === 'logs') {
+            this.renderSystemLogs();
+        } else if (tabName === 'overview') {
+            this.updatePortalStats();
+            this.generateActivityChart();
+        }
+    }
+
+    updatePortalStats() {
+        const totalPackages = this.packages.length;
+        const totalUsers = this.portalUsers.length;
+        const today = new Date().toLocaleDateString();
+        const todayActivity = this.systemLogs.filter(log => 
+            new Date(log.timestamp).toLocaleDateString() === today
+        ).length;
+        
+        const storageUsed = Math.round(
+            (JSON.stringify(this.packages).length + 
+             JSON.stringify(this.systemLogs).length + 
+             JSON.stringify(this.portalUsers).length) / 1024
+        );
+        
+        document.getElementById('portalTotalPackages').textContent = totalPackages;
+        document.getElementById('portalTotalUsers').textContent = totalUsers;
+        document.getElementById('portalTodayActivity').textContent = todayActivity;
+        document.getElementById('portalStorageUsed').textContent = storageUsed;
+    }
+
+    generateActivityChart() {
+        const chartContainer = document.getElementById('activityChart');
+        chartContainer.innerHTML = '';
+        
+        // Generate last 7 days of activity
+        const last7Days = [];
+        for (let i = 6; i >= 0; i--) {
+            const date = new Date();
+            date.setDate(date.getDate() - i);
+            const dateStr = date.toLocaleDateString();
+            
+            const dayActivity = this.systemLogs.filter(log => 
+                new Date(log.timestamp).toLocaleDateString() === dateStr
+            ).length;
+            
+            last7Days.push({ date: dateStr, count: dayActivity });
+        }
+        
+        const maxCount = Math.max(...last7Days.map(d => d.count), 1);
+        
+        last7Days.forEach(day => {
+            const bar = document.createElement('div');
+            bar.className = 'chart-bar';
+            bar.style.height = `${(day.count / maxCount) * 100}%`;
+            bar.title = `${day.date}: ${day.count} activities`;
+            chartContainer.appendChild(bar);
+        });
+    }
+
+    // User Management
+    renderPortalUsers() {
+        const usersList = document.getElementById('usersList');
+        usersList.innerHTML = '';
+        
+        this.portalUsers.forEach(user => {
+            const userItem = document.createElement('div');
+            userItem.className = 'user-item';
+            userItem.innerHTML = `
+                <div class="user-info">
+                    <h4>${user.username}</h4>
+                    <p>Role: ${user.role} | Created: ${new Date(user.created).toLocaleDateString()}</p>
+                    <p>Last Login: ${user.lastLogin ? new Date(user.lastLogin).toLocaleString() : 'Never'}</p>
+                </div>
+                <div class="user-actions">
+                    <button class="secondary-btn" onclick="packageTracker.editUser(${user.id})">
+                        <i class="fas fa-edit"></i> Edit
+                    </button>
+                    ${user.id !== 1 ? `<button class="danger-btn" onclick="packageTracker.deleteUser(${user.id})">
+                        <i class="fas fa-trash"></i> Delete
+                    </button>` : ''}
+                </div>
+            `;
+            usersList.appendChild(userItem);
+        });
+    }
+
+    showAddUserForm() {
+        const username = prompt('Enter username:');
+        if (!username) return;
+        
+        const role = prompt('Enter role (admin/user):', 'user');
+        if (!role) return;
+        
+        if (this.portalUsers.find(u => u.username === username)) {
+            this.showToast('Username already exists', 'error');
+            return;
+        }
+        
+        const newUser = {
+            id: Date.now(),
+            username: username,
+            role: role,
+            created: new Date().toISOString(),
+            lastLogin: null
+        };
+        
+        this.portalUsers.push(newUser);
+        this.savePortalUsers();
+        this.logActivity('Portal', `New user created: ${username}`);
+        this.showToast('User created successfully!', 'success');
+        this.renderPortalUsers();
+    }
+
+    editUser(userId) {
+        const user = this.portalUsers.find(u => u.id === userId);
+        if (!user) return;
+        
+        const newRole = prompt('Enter new role:', user.role);
+        if (newRole && newRole !== user.role) {
+            user.role = newRole;
+            this.savePortalUsers();
+            this.logActivity('Portal', `User ${user.username} role updated to ${newRole}`);
+            this.showToast('User updated successfully!', 'success');
+            this.renderPortalUsers();
+        }
+    }
+
+    deleteUser(userId) {
+        if (userId === 1) {
+            this.showToast('Cannot delete admin user', 'error');
+            return;
+        }
+        
+        if (confirm('Are you sure you want to delete this user?')) {
+            const user = this.portalUsers.find(u => u.id === userId);
+            this.portalUsers = this.portalUsers.filter(u => u.id !== userId);
+            this.savePortalUsers();
+            this.logActivity('Portal', `User deleted: ${user.username}`);
+            this.showToast('User deleted successfully!', 'success');
+            this.renderPortalUsers();
+        }
     }
 
     // Camera Functionality
@@ -163,38 +419,7 @@ class PackageTracker {
         form.reset();
     }
 
-    handleFormSubmit(e) {
-        e.preventDefault();
-        
-        const formData = new FormData(e.target);
-        const packageData = {
-            id: Date.now().toString(),
-            trackingNumber: formData.get('trackingNumber') || document.getElementById('trackingNumber').value,
-            carrier: formData.get('carrier') || document.getElementById('carrier').value,
-            recipientName: formData.get('recipientName') || document.getElementById('recipientName').value,
-            recipientPhone: formData.get('recipientPhone') || document.getElementById('recipientPhone').value,
-            location: formData.get('location') || document.getElementById('location').value,
-            receivedBy: formData.get('receivedBy') || document.getElementById('receivedBy').value,
-            notes: formData.get('notes') || document.getElementById('notes').value,
-            timestamp: new Date().toISOString(),
-            date: new Date().toLocaleDateString(),
-            time: new Date().toLocaleTimeString()
-        };
 
-        // Validate required fields
-        if (!packageData.trackingNumber || !packageData.carrier || !packageData.recipientName || 
-            !packageData.recipientPhone || !packageData.location || !packageData.receivedBy) {
-            this.showToast('Please fill in all required fields', 'error');
-            return;
-        }
-
-        // Save package
-        this.packages.unshift(packageData);
-        this.savePackages();
-        
-        this.showToast('Package saved successfully!', 'success');
-        this.showDashboard();
-    }
 
     // Data Management
     savePackages() {
@@ -335,11 +560,218 @@ class PackageTracker {
         
         URL.revokeObjectURL(url);
     }
+
+    // System Logs
+    logActivity(category, message) {
+        const logEntry = {
+            id: Date.now(),
+            timestamp: new Date().toISOString(),
+            category: category,
+            message: message,
+            user: this.isLoggedInToPortal ? this.portalCredentials.username : 'System'
+        };
+        
+        this.systemLogs.unshift(logEntry);
+        
+        // Keep only last 1000 logs
+        if (this.systemLogs.length > 1000) {
+            this.systemLogs = this.systemLogs.slice(0, 1000);
+        }
+        
+        this.saveSystemLogs();
+    }
+
+    renderSystemLogs() {
+        const logsContainer = document.getElementById('logsContainer');
+        logsContainer.innerHTML = '';
+        
+        if (this.systemLogs.length === 0) {
+            logsContainer.innerHTML = '<p style="text-align: center; color: var(--text-tertiary);">No logs available</p>';
+            return;
+        }
+        
+        this.systemLogs.slice(0, 50).forEach(log => {
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry';
+            logEntry.innerHTML = `
+                <span class="log-timestamp">${new Date(log.timestamp).toLocaleString()}</span>
+                <span style="color: var(--primary-blue);">[${log.category}]</span>
+                <span>${log.message}</span>
+                <span style="color: var(--text-tertiary); margin-left: auto;">(${log.user})</span>
+            `;
+            logsContainer.appendChild(logEntry);
+        });
+    }
+
+    clearSystemLogs() {
+        if (confirm('Clear all system logs?')) {
+            this.systemLogs = [];
+            this.saveSystemLogs();
+            this.logActivity('Portal', 'System logs cleared');
+            this.showToast('System logs cleared!', 'success');
+            this.renderSystemLogs();
+        }
+    }
+
+    // Settings Management
+    loadSettings() {
+        document.getElementById('autoBackup').checked = this.systemSettings.autoBackup;
+        document.getElementById('retentionDays').value = this.systemSettings.retentionDays;
+        document.getElementById('themeMode').value = this.systemSettings.themeMode;
+    }
+
+    saveSettings() {
+        this.systemSettings.autoBackup = document.getElementById('autoBackup').checked;
+        this.systemSettings.retentionDays = parseInt(document.getElementById('retentionDays').value);
+        this.systemSettings.themeMode = document.getElementById('themeMode').value;
+        
+        this.saveSystemSettings();
+        this.logActivity('Portal', 'System settings updated');
+        this.showToast('Settings saved successfully!', 'success');
+    }
+
+    // Storage Methods
+    savePortalUsers() {
+        localStorage.setItem('portalUsers', JSON.stringify(this.portalUsers));
+    }
+
+    saveSystemLogs() {
+        localStorage.setItem('systemLogs', JSON.stringify(this.systemLogs));
+    }
+
+    saveSystemSettings() {
+        localStorage.setItem('systemSettings', JSON.stringify(this.systemSettings));
+    }
+
+    saveAllData() {
+        this.savePackages();
+        this.savePortalUsers();
+        this.saveSystemLogs();
+        this.saveSystemSettings();
+    }
+
+    // Data Management
+    exportAllData() {
+        const exportData = {
+            packages: this.packages,
+            users: this.portalUsers,
+            logs: this.systemLogs,
+            settings: this.systemSettings,
+            exportDate: new Date().toISOString()
+        };
+        
+        const dataStr = JSON.stringify(exportData, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(dataBlob);
+        
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `packagetracker-backup-${new Date().toISOString().split('T')[0]}.json`;
+        link.click();
+        
+        URL.revokeObjectURL(url);
+        this.logActivity('Portal', 'Data exported');
+        this.showToast('Data exported successfully!', 'success');
+    }
+
+    importData() {
+        document.getElementById('importFileInput').click();
+    }
+
+    handleFileImport(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const importData = JSON.parse(event.target.result);
+                
+                if (confirm('This will replace all current data. Are you sure?')) {
+                    if (importData.packages) this.packages = importData.packages;
+                    if (importData.users) this.portalUsers = importData.users;
+                    if (importData.logs) this.systemLogs = importData.logs;
+                    if (importData.settings) this.systemSettings = importData.settings;
+                    
+                    this.saveAllData();
+                    this.logActivity('Portal', 'Data imported from backup');
+                    this.showToast('Data imported successfully!', 'success');
+                    this.updateStats();
+                    this.updatePortalStats();
+                    this.renderPortalUsers();
+                    this.renderSystemLogs();
+                }
+            } catch (error) {
+                this.showToast('Invalid backup file format', 'error');
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    clearAllData() {
+        if (confirm('This will permanently delete ALL data. Are you sure?')) {
+            if (confirm('This action cannot be undone. Continue?')) {
+                this.packages = [];
+                this.systemLogs = [];
+                // Keep admin user
+                this.portalUsers = [this.portalUsers[0]];
+                
+                this.saveAllData();
+                this.logActivity('Portal', 'All data cleared');
+                this.showToast('All data cleared successfully!', 'success');
+                this.updateStats();
+                this.updatePortalStats();
+                this.renderPortalUsers();
+                this.renderSystemLogs();
+                this.renderPackageList();
+            }
+        }
+    }
+
+    // Enhanced form submission with logging
+    handleFormSubmit(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(e.target);
+        const packageData = {
+            id: Date.now().toString(),
+            trackingNumber: formData.get('trackingNumber') || document.getElementById('trackingNumber').value,
+            carrier: formData.get('carrier') || document.getElementById('carrier').value,
+            recipientName: formData.get('recipientName') || document.getElementById('recipientName').value,
+            recipientPhone: formData.get('recipientPhone') || document.getElementById('recipientPhone').value,
+            location: formData.get('location') || document.getElementById('location').value,
+            receivedBy: formData.get('receivedBy') || document.getElementById('receivedBy').value,
+            notes: formData.get('notes') || document.getElementById('notes').value,
+            timestamp: new Date().toISOString(),
+            date: new Date().toLocaleDateString(),
+            time: new Date().toLocaleTimeString()
+        };
+
+        // Validate required fields
+        if (!packageData.trackingNumber || !packageData.carrier || !packageData.recipientName || 
+            !packageData.recipientPhone || !packageData.location || !packageData.receivedBy) {
+            this.showToast('Please fill in all required fields', 'error');
+            return;
+        }
+
+        // Save package
+        this.packages.unshift(packageData);
+        this.savePackages();
+        
+        // Log the activity
+        this.logActivity('Package', `New package added: ${packageData.trackingNumber}`);
+        
+        this.showToast('Package saved successfully!', 'success');
+        this.showDashboard();
+    }
 }
+
+// Global reference for inline event handlers
+let packageTracker;
 
 // Initialize the app when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    new PackageTracker();
+    packageTracker = new PackageTracker();
 });
 
 // Service Worker Registration (for PWA functionality)
