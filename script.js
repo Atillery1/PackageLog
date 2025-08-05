@@ -1,4 +1,4 @@
-// Package Tracker Pro - Main JavaScript File
+// Package Tracker Pro - Enhanced with iOS 26 Liquid Glass Interactions
 
 class PackageTracker {
     constructor() {
@@ -13,9 +13,10 @@ class PackageTracker {
         this.systemSettings = JSON.parse(localStorage.getItem('systemSettings')) || {
             autoBackup: false,
             retentionDays: 365,
-            themeMode: 'light'
+            themeMode: 'dark'
         };
         this.portalCredentials = { username: 'hilton', password: 'hilton2025!' };
+        this.lastScrollY = 0;
         this.init();
     }
 
@@ -25,6 +26,150 @@ class PackageTracker {
         this.renderPackageList();
         this.checkCameraSupport();
         this.logActivity('System', 'Application started');
+        this.setupScrollBehavior();
+        this.setupMicroInteractions();
+        this.applyLiquidGlassTheme();
+    }
+
+    setupScrollBehavior() {
+        const header = document.querySelector('.header');
+        let ticking = false;
+
+        const updateHeader = () => {
+            const currentScrollY = window.scrollY;
+            
+            if (currentScrollY > 50) {
+                header.classList.add('scrolled');
+            } else {
+                header.classList.remove('scrolled');
+            }
+            
+            this.lastScrollY = currentScrollY;
+            ticking = false;
+        };
+
+        window.addEventListener('scroll', () => {
+            if (!ticking) {
+                requestAnimationFrame(updateHeader);
+                ticking = true;
+            }
+        });
+    }
+
+    setupMicroInteractions() {
+        // Add button press animations
+        document.addEventListener('click', (e) => {
+            if (e.target.matches('button, .btn, .primary-btn, .secondary-btn, .danger-btn')) {
+                this.addRippleEffect(e.target, e);
+                this.addPressAnimation(e.target);
+            }
+        });
+
+        // Add hover glow states
+        document.addEventListener('mouseover', (e) => {
+            if (e.target.matches('.stat-card, .package-item, .portal-stat-card')) {
+                this.addHoverGlow(e.target);
+            }
+        });
+
+        // Add card bounce on interaction
+        const cards = document.querySelectorAll('.stat-card, .package-item, .portal-stat-card');
+        cards.forEach(card => {
+            card.addEventListener('click', () => {
+                this.addBounceAnimation(card);
+            });
+        });
+    }
+
+    addRippleEffect(element, event) {
+        const ripple = document.createElement('span');
+        const rect = element.getBoundingClientRect();
+        const size = Math.max(rect.width, rect.height);
+        const x = event.clientX - rect.left - size / 2;
+        const y = event.clientY - rect.top - size / 2;
+        
+        ripple.style.cssText = `
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(0);
+            animation: ripple 0.6s linear;
+            left: ${x}px;
+            top: ${y}px;
+            width: ${size}px;
+            height: ${size}px;
+        `;
+        
+        element.style.position = 'relative';
+        element.style.overflow = 'hidden';
+        element.appendChild(ripple);
+        
+        setTimeout(() => {
+            ripple.remove();
+        }, 600);
+    }
+
+    addPressAnimation(element) {
+        element.style.transform = 'scale(0.95)';
+        setTimeout(() => {
+            element.style.transform = '';
+        }, 150);
+    }
+
+    addHoverGlow(element) {
+        element.style.transition = 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+        element.style.boxShadow = '0 16px 64px rgba(0, 122, 255, 0.2)';
+    }
+
+    addBounceAnimation(element) {
+        element.style.animation = 'bounce 0.6s ease';
+        setTimeout(() => {
+            element.style.animation = '';
+        }, 600);
+    }
+
+    applyLiquidGlassTheme() {
+        // Add CSS for ripple animation
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes ripple {
+                to {
+                    transform: scale(4);
+                    opacity: 0;
+                }
+            }
+            
+            @keyframes bounce {
+                0%, 20%, 53%, 80%, 100% {
+                    animation-timing-function: cubic-bezier(0.215, 0.610, 0.355, 1.000);
+                    transform: translate3d(0,0,0);
+                }
+                40%, 43% {
+                    animation-timing-function: cubic-bezier(0.755, 0.050, 0.855, 0.060);
+                    transform: translate3d(0, -8px, 0);
+                }
+                70% {
+                    animation-timing-function: cubic-bezier(0.755, 0.050, 0.855, 0.060);
+                    transform: translate3d(0, -4px, 0);
+                }
+                90% {
+                    transform: translate3d(0,-1px,0);
+                }
+            }
+            
+            /* Smooth page transitions */
+            .view {
+                transition: all 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            }
+            
+            /* Enhanced focus states */
+            *:focus-visible {
+                outline: 2px solid rgba(10, 132, 255, 0.6);
+                outline-offset: 2px;
+                border-radius: 8px;
+            }
+        `;
+        document.head.appendChild(style);
     }
 
     setupEventListeners() {
