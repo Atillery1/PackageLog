@@ -87,6 +87,67 @@ A modern, iOS-style Progressive Web App for scanning and tracking packages from 
 - Backend synchronization option
 - Package status tracking via carrier APIs
 
+## Troubleshooting Scanning Issues 🔧
+
+### Common Scanning Problems
+
+1. **"No barcode detected" message**
+   - Ensure good lighting conditions
+   - Hold the device steady
+   - Position barcode 6-12 inches from camera
+   - Try switching between front/back camera
+   - Use the "Manual" entry option as alternative
+
+2. **Camera not working**
+   - Check browser permissions for camera access
+   - Refresh the page and try again
+   - Try a different browser (Chrome/Safari recommended)
+   - Ensure no other apps are using the camera
+
+3. **App not detecting packages**
+   - Current version uses simulated detection
+   - The app analyzes image contrast to simulate barcode presence
+   - For real detection, integrate a barcode library (see below)
+
+### Integrating Real Barcode Detection
+
+To add real barcode scanning capabilities, consider these libraries:
+
+#### Option 1: ZXing-js (Recommended)
+```html
+<script src="https://unpkg.com/@zxing/library@latest"></script>
+```
+
+#### Option 2: QuaggaJS
+```html
+<script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+```
+
+#### Option 3: ZBar.wasm
+- Modern WebAssembly-based solution
+- Supports multiple barcode formats
+- Good performance on mobile devices
+
+### Implementation Example (ZXing-js)
+
+Replace the `detectBarcode()` function in `script.js`:
+
+```javascript
+async detectBarcode(canvas) {
+    try {
+        const codeReader = new ZXing.BrowserMultiFormatReader();
+        const result = await codeReader.decodeFromCanvas(canvas);
+        
+        if (result) {
+            this.showToast(`Barcode detected: ${result.text}`, 'success');
+            this.showFormView(result.text);
+        }
+    } catch (error) {
+        this.showToast('No barcode detected. Try repositioning.', 'error');
+    }
+}
+```
+
 ## Support 💬
 
 This is a demo application. For real-world usage, you may want to integrate with actual barcode scanning libraries and carrier tracking APIs.
