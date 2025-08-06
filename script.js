@@ -92,10 +92,13 @@ class PackageTracker {
         this.showView('scanView');
     }
 
-    showFormView(trackingNumber = '') {
+    showFormView(trackingNumber = '', carrier = '') {
         this.showView('formView');
         if (trackingNumber) {
             document.getElementById('trackingNumber').value = trackingNumber;
+        }
+        if (carrier) {
+            document.getElementById('carrier').value = carrier;
         }
         this.resetForm();
     }
@@ -328,11 +331,28 @@ class PackageTracker {
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
             this.showToast('Camera not supported on this device', 'error');
             document.getElementById('scanBtn').style.display = 'none';
+            console.log('Camera not supported: MediaDevices API not available');
+        } else {
+            console.log('Camera support detected');
+            // Check if we can enumerate devices
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(device => device.kind === 'videoinput');
+                console.log(`Found ${videoDevices.length} video input devices`);
+                
+                if (videoDevices.length === 0) {
+                    this.showToast('No camera devices found', 'error');
+                    document.getElementById('scanBtn').style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Error enumerating devices:', error);
+            }
         }
     }
 
     async startCamera() {
         try {
+            console.log('Requesting camera access...');
             const constraints = {
                 video: {
                     facingMode: 'environment', // Use back camera
@@ -345,32 +365,79 @@ class PackageTracker {
             const video = document.getElementById('cameraFeed');
             video.srcObject = this.cameraStream;
             
-            this.showToast('Camera ready! Position barcode in frame', 'info');
+            // Wait for video to be ready
+            video.onloadedmetadata = () => {
+                console.log(`Camera started: ${video.videoWidth}x${video.videoHeight}`);
+                this.showToast('Camera ready! Position barcode in frame and tap Capture', 'success');
+            };
+            
+            video.onerror = (error) => {
+                console.error('Video element error:', error);
+                this.showToast('Video playback error', 'error');
+            };
+            
         } catch (error) {
             console.error('Camera access error:', error);
-            this.showToast('Camera access denied', 'error');
+            
+            // Provide more specific error messages
+            if (error.name === 'NotAllowedError') {
+                this.showToast('Camera permission denied. Please allow camera access and refresh.', 'error');
+            } else if (error.name === 'NotFoundError') {
+                this.showToast('No camera found on this device', 'error');
+            } else if (error.name === 'NotReadableError') {
+                this.showToast('Camera is being used by another app', 'error');
+            } else {
+                this.showToast(`Camera error: ${error.message}`, 'error');
+            }
         }
     }
 
     stopCamera() {
         if (this.cameraStream) {
-            this.cameraStream.getTracks().forEach(track => track.stop());
+            console.log('Stopping camera...');
+            this.cameraStream.getTracks().forEach(track => {
+                track.stop();
+                console.log(`Stopped track: ${track.kind}`);
+            });
             this.cameraStream = null;
+            
+            // Clear video element
+            const video = document.getElementById('cameraFeed');
+            if (video) {
+                video.srcObject = null;
+            }
         }
     }
 
     async switchCamera() {
+        console.log('Switching camera...');
+        const currentFacingMode = this.cameraStream?.getVideoTracks()[0]?.getSettings()?.facingMode;
         this.stopCamera();
+        
         try {
             const constraints = {
                 video: {
-                    facingMode: this.cameraStream?.getVideoTracks()[0]?.getSettings()?.facingMode === 'environment' 
-                        ? 'user' : 'environment'
+                    facingMode: currentFacingMode === 'environment' ? 'user' : 'environment',
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
                 }
             };
-            await this.startCamera();
+            
+            this.cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+            const video = document.getElementById('cameraFeed');
+            video.srcObject = this.cameraStream;
+            
+            video.onloadedmetadata = () => {
+                const newFacingMode = this.cameraStream?.getVideoTracks()[0]?.getSettings()?.facingMode;
+                console.log(`Switched to ${newFacingMode} camera`);
+                this.showToast(`Switched to ${newFacingMode === 'user' ? 'front' : 'back'} camera`, 'success');
+            };
+            
         } catch (error) {
-            this.showToast('Unable to switch camera', 'error');
+            console.error('Camera switch error:', error);
+            this.showToast('Unable to switch camera. Trying to restart original camera...', 'error');
+            // Try to restart the original camera
+            await this.startCamera();
         }
     }
 
@@ -379,27 +446,89 @@ class PackageTracker {
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');
         
+        // Check if video is ready
+        if (!video || video.readyState !== 4) {
+            this.showToast('Camera not ready. Please wait...', 'error');
+            return;
+        }
+        
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         context.drawImage(video, 0, 0);
         
-        // Simulate barcode detection
-        this.simulateBarcodeDetection();
+        // Try to detect barcode from the captured image
+        this.detectBarcode(canvas);
+    }
+
+    detectBarcode(canvas) {
+        // Show scanning indicator
+        this.showToast('Analyzing image for barcodes...', 'info');
+        
+        // For now, we'll try to detect if there's enough contrast/content in the image
+        // This is a basic check - in a real app you'd use a barcode detection library
+        const context = canvas.getContext('2d');
+        const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+        const hasContent = this.analyzeImageContent(imageData);
+        
+        if (hasContent) {
+            // Simulate successful detection with better feedback
+            setTimeout(() => {
+                this.showToast('Package detected! Generating details...', 'success');
+                this.simulateBarcodeDetection();
+            }, 1000);
+        } else {
+            // No barcode detected
+            this.showToast('No barcode detected. Try repositioning the package or use manual entry.', 'error');
+        }
+    }
+
+    analyzeImageContent(imageData) {
+        // Basic image analysis to check if there's enough contrast/content
+        // This is a simplified version - real barcode detection would be much more sophisticated
+        const data = imageData.data;
+        let totalBrightness = 0;
+        let contrastPoints = 0;
+        
+        // Sample every 100th pixel to check for contrast patterns
+        for (let i = 0; i < data.length; i += 400) { // RGBA, so step by 400 (100 pixels * 4)
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+            const brightness = (r + g + b) / 3;
+            totalBrightness += brightness;
+            
+            // Check for high contrast (potential barcode lines)
+            if (i > 400) {
+                const prevR = data[i - 400];
+                const prevG = data[i - 399];
+                const prevB = data[i - 398];
+                const prevBrightness = (prevR + prevG + prevB) / 3;
+                
+                if (Math.abs(brightness - prevBrightness) > 50) {
+                    contrastPoints++;
+                }
+            }
+        }
+        
+        const avgBrightness = totalBrightness / (data.length / 4);
+        
+        // Return true if image has reasonable brightness and some contrast patterns
+        return avgBrightness > 30 && avgBrightness < 200 && contrastPoints > 10;
     }
 
     simulateBarcodeDetection() {
-        // Simulate scanning delay
-        this.showToast('Scanning...', 'info');
+        // Enhanced simulation with better tracking number generation
+        const carriers = ['amazon', 'fedex', 'ups', 'usps', 'dhl'];
+        const randomCarrier = carriers[Math.floor(Math.random() * carriers.length)];
+        const mockTrackingNumber = this.generateMockTrackingNumber(randomCarrier);
         
+        console.log(`Simulated scan detected: ${mockTrackingNumber} (${randomCarrier})`);
+        this.showToast(`Barcode detected! Carrier: ${randomCarrier.toUpperCase()}`, 'success');
+        
+        // Pre-fill form with detected carrier
         setTimeout(() => {
-            // Generate a mock tracking number
-            const carriers = ['amazon', 'fedex', 'ups', 'usps', 'dhl'];
-            const randomCarrier = carriers[Math.floor(Math.random() * carriers.length)];
-            const mockTrackingNumber = this.generateMockTrackingNumber(randomCarrier);
-            
-            this.showToast('Barcode detected!', 'success');
-            this.showFormView(mockTrackingNumber);
-        }, 1500);
+            this.showFormView(mockTrackingNumber, randomCarrier);
+        }, 500);
     }
 
     generateMockTrackingNumber(carrier) {
